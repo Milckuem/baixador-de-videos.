@@ -16,7 +16,7 @@ python baixar_video.py "URL" -q 720
 
 ## Caso queira apenas o audio
 python baixar_video.py "https://site.com/pagina-do-video" --audio
-em https colocar o link do site para downlaod pode ser o youtube.
+# em https colocar o link do site para downlaod pode ser o youtube.
 
 ## Aviso
 Use apenas para conteúdo que você tem direito de baixar e respeite os termos de uso dos sites.
