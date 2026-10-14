@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""
+Baixador de vídeos da internet (baseado em yt-dlp), com escolha de formato.
+
+Instalação:
+    pip install -U yt-dlp
+    # Instale também o ffmpeg (necessário para MP3, WAV etc. e para juntar vídeo + áudio)
+
+Uso:
+    python baixar_video.py URL                      # vídeo em MP4 (padrão)
+    python baixar_video.py URL --formato mp3        # só áudio em MP3
+    python baixar_video.py URL -f wav               # só áudio em WAV
+    python baixar_video.py URL -f mkv -q 720        # vídeo MKV até 720p
+    python baixar_video.py URL --audio              # atalho para --formato mp3
+
+Formatos de vídeo: mp4, mkv, webm
+Formatos de áudio: mp3, m4a, aac, wav, flac, opus
+
+Use apenas para conteúdo que você tem direito de baixar
+(seu próprio conteúdo, domínio público, licenças livres ou permissão do autor).
+Respeite os Termos de Uso dos sites e as leis de direitos autorais.
+"""
+
+import argparse
+import sys
+from pathlib import Path
+
+try:
+    import yt_dlp
+except ImportError:
+    sys.exit("yt-dlp não encontrado. Instale com: pip install -U yt-dlp")
+
+FORMATOS_VIDEO = ["mp4", "mkv", "webm"]
+FORMATOS_AUDIO = ["mp3", "m4a", "aac", "wav", "flac", "opus"]
+FORMATOS_COM_QUALIDADE = {"mp3", "m4a", "aac", "opus"}  # formatos com perda
+
+
+def progresso(d):
+    if d["status"] == "downloading":
+        pct = d.get("_percent_str", "?").strip()
+        vel = d.get("_speed_str", "?").strip()
+        eta = d.get("_eta_str", "?").strip()
+        print(f"\r⬇  {pct} | {vel} | ETA {eta}   ", end="", flush=True)
+    elif d["status"] == "finished":
+        print("\n✔ Download concluído, convertendo/processando...")
+
+
+def montar_opcoes(args):
+    pasta = Path(args.saida).expanduser()
+    pasta.mkdir(parents=True, exist_ok=True)
+
+    formato = "mp3" if args.audio else args.formato.lower()
+
+    opcoes = {
+        "outtmpl": str(pasta / "%(title).150B [%(id)s].%(ext)s"),
+        "noplaylist": not args.playlist,
+        "progress_hooks": [progresso],
+        "retries": 10,
+        "fragment_retries": 10,
+        "quiet": True,
+        "no_warnings": True,
+    }
+
+    if formato in FORMATOS_AUDIO:
+        opcoes["format"] = "bestaudio/best"
+        pp = {"key": "FFmpegExtractAudio", "preferredcodec": formato}
+        if formato in FORMATOS_COM_QUALIDADE:
+            pp["preferredquality"] = str(args.bitrate)
+        opcoes["postprocessors"] = [pp]
+    else:
+        if args.qualidade:
+            h = args.qualidade
+            opcoes["format"] = f"bv*[height<={h}]+ba/b[height<={h}]/best"
+        else:
+            opcoes["format"] = "bv*+ba/best"
+        opcoes["merge_output_format"] = formato
+
+    if args.legendas and formato in FORMATOS_VIDEO:
+        opcoes["writesubtitles"] = True
+        opcoes["writeautomaticsub"] = True
+        opcoes["subtitleslangs"] = ["pt", "pt-BR", "en"]
+
+    if args.cookies_do_navegador:
+        opcoes["cookiesfrombrowser"] = (args.cookies_do_navegador,)
+
+    if args.cookies_arquivo:
+        opcoes["cookiefile"] = args.cookies_arquivo
+
+    return opcoes, formato
+
+
+def baixar(url, opcoes):
+    with yt_dlp.YoutubeDL(opcoes) as ydl:
+        info = ydl.extract_info(url, download=True)
+        titulo = info.get("title", "vídeo") if info else "vídeo"
+        print(f"✔ Pronto: {titulo}")
+
+
+def main():
+    p = argparse.ArgumentParser(
+        description="Baixa vídeos ou áudios de páginas da web."
+    )
+    p.add_argument("urls", nargs="+", help="URL(s) da página com o vídeo")
+    p.add_argument(
+        "-f", "--formato", default="mp4",
+        choices=FORMATOS_VIDEO + FORMATOS_AUDIO,
+        help="formato de saída (padrão: mp4)",
+    )
+    p.add_argument("-a", "--audio", action="store_true",
+                   help="atalho para --formato mp3")
+    p.add_argument("-o", "--saida", default="downloads",
+                   help="pasta de destino (padrão: ./downloads)")
+    p.add_argument("-q", "--qualidade", type=int,
+                   help="altura máxima do vídeo em pixels (ex.: 480, 720, 1080)")
+    p.add_argument("-b", "--bitrate", type=int, default=192,
+                   help="qualidade do áudio em kbps (padrão: 192)")
+    p.add_argument("-p", "--playlist", action="store_true",
+                   help="baixar a playlist inteira, se a URL for de uma")
+    p.add_argument("-l", "--legendas", action="store_true",
+                   help="baixar legendas (pt/en) em vídeos, quando disponíveis")
+    p.add_argument("--cookies-do-navegador", metavar="NAVEGADOR",
+                   help="usar cookies do navegador (chrome, firefox, edge...)")
+    p.add_argument("--cookies-arquivo", metavar="ARQUIVO",
+                   help="arquivo de cookies no formato Netscape")
+    args = p.parse_args()
+
+    opcoes, formato = montar_opcoes(args)
+    print(f"Formato de saída: .{formato}")
+
+    for url in args.urls:
+        print(f"\n▶ {url}")
+        try:
+            baixar(url, opcoes)
+        except yt_dlp.utils.DownloadError as e:
+            print(f"\n✖ Erro ao baixar: {e}")
+        except KeyboardInterrupt:
+            sys.exit("\nCancelado pelo usuário.")
+
+
+if __name__ == "__main__":
+    main()
