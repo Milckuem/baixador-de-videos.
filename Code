@@ -2,5 +2,5 @@ git init
 git add .
 git commit -m "Primeira versão do baixador de vídeos"
 git branch -M main
-git remote add origin https://github.com/SEU-USUARIO/baixador-de-videos.git
+git remote add origin https://github.com/Milckuem/baixador-de-videos.git
 git push -u origin main
